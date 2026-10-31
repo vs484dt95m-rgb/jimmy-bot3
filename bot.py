@@ -20,7 +20,6 @@ articles_publies = set()
 
 def envoyer_telegram(texte, image_url=None):
     if image_url:
-        # Envoi avec image
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendPhoto"
         payload = {
             "chat_id": CHANNEL_ID,
@@ -29,7 +28,6 @@ def envoyer_telegram(texte, image_url=None):
             "parse_mode": "Markdown"
         }
     else:
-        # Envoi texte seul
         url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
         payload = {
             "chat_id": CHANNEL_ID,
@@ -46,21 +44,109 @@ def envoyer_telegram(texte, image_url=None):
 
 def get_image_url(entry):
     """Essaie de récupérer une image depuis le flux RSS"""
-    # Enclosure (souvent utilisé pour les images)
     if hasattr(entry, "enclosures") and entry.enclosures:
         for enc in entry.enclosures:
             if enc.get("type", "").startswith("image"):
                 return enc.get("href")
     
-    # media_content
     if hasattr(entry, "media_content") and entry.media_content:
         return entry.media_content[0].get("url")
     
-    # media_thumbnail
     if hasattr(entry, "media_thumbnail") and entry.media_thumbnail:
         return entry.media_thumbnail[0].get("url")
     
     return None
+
+def get_theme_and_emoji(titre):
+    """Retourne le thème + emoji selon le titre"""
+    titre_lower = titre.lower()
+    
+    # Important (FLASH INFO) → emoji éclair
+    if any(word in titre_lower for word in [
+        "iran", "israel", "ukraine", "guerre", "bombardement", "missile", "attaque", 
+        "mort", "tué", "attentat", "explosion", "frappe", "conflit", "armée", "soldat"
+    ]):
+        return "FLASH INFO", "⚡️"
+    
+    # Politique
+    if any(word in titre_lower for word in [
+        "macron", "gouvernement", "président", "politique", "assemblée", "sénat", 
+        "loi", "député", "ministre", "réforme", "élection", "vote", "parti", 
+        "rn", "lfi", "renaissance", "ps", "lr", "budget", "taxe"
+    ]):
+        return "Politique", "🏛️"
+    
+    # Faits divers / Justice
+    elif any(word in titre_lower for word in [
+        "police", "justice", "tribunal", "procès", "arrestation", "crime", 
+        "meurtre", "agression", "vol", "cambriolage", "prison", "condamné", 
+        "enquête", "suspect", "victime", "homicide"
+    ]):
+        return "Faits divers", "⚖️"
+    
+    # Économie
+    elif any(word in titre_lower for word in [
+        "économie", "euro", "bourse", "inflation", "emploi", "entreprise", 
+        "chômage", "salaire", "prix", "carburant", "essence", "immobilier", 
+        "banque", "crédit", "pme", "industrie"
+    ]):
+        return "Économie", "📈"
+    
+    # Sport
+    elif any(word in titre_lower for word in [
+        "sport", "foot", "football", "match", "ligue", "psg", "om", "rugby", 
+        "tennis", "roland-garros", "cyclisme", "tour de france", "basket", 
+        "formule 1", "f1", "jo", "olympique", "championnat"
+    ]):
+        return "Sport", "⚽"
+    
+    # Météo / Climat / Environnement
+    elif any(word in titre_lower for word in [
+        "climat", "météo", "tempête", "chaleur", "inondation", "canicule", 
+        "orage", "neige", "froid", "réchauffement", "écologie", "pollution", 
+        "environnement", "sécheresse"
+    ]):
+        return "Météo / Climat", "🌪️"
+    
+    # Santé
+    elif any(word in titre_lower for word in [
+        "santé", "hôpital", "covid", "virus", "médecin", "épidémie", 
+        "vaccin", "maladie", "cancer", "urgences", "soignants", "grippe"
+    ]):
+        return "Santé", "🏥"
+    
+    # International
+    elif any(word in titre_lower for word in [
+        "international", "monde", "europe", "chine", "usa", "états-unis", 
+        "russie", "poutine", "trump", "biden", "allemagne", "italie", 
+        "espagne", "onu", "otan", "diplomatie"
+    ]):
+        return "International", "🌍"
+    
+    # Société / Éducation
+    elif any(word in titre_lower for word in [
+        "école", "éducation", "université", "étudiant", "professeur", 
+        "manifestation", "grève", "syndicat", "retraite", "logement", 
+        "famille", "société"
+    ]):
+        return "Société", "👥"
+    
+    # Tech / Science
+    elif any(word in titre_lower for word in [
+        "technologie", "tech", "ia", "intelligence artificielle", "internet", 
+        "téléphone", "apple", "google", "espace", "nasa", "science"
+    ]):
+        return "Tech / Science", "🔬"
+    
+    # Culture / People
+    elif any(word in titre_lower for word in [
+        "cinéma", "film", "musique", "concert", "festival", "culture", 
+        "people", "célébrité", "acteur", "chanteur"
+    ]):
+        return "Culture", "🎬"
+    
+    else:
+        return "Actualité", "📰"
 
 def verifier_actus():
     print("Vérification des nouvelles actualités...")
@@ -78,12 +164,14 @@ def verifier_actus():
                     lien = entry.link
                     image_url = get_image_url(entry)
                     
+                    theme, emoji = get_theme_and_emoji(titre)
+                    
                     message = (
-                        f"⚡️ *FLASH INFO* | **Info France Plus**\n\n"
-                        f"📰 *{titre}*\n\n"
-                        f"📰 Source : *{source}*\n"
-                        f"🔗 [Lire l'article]({lien})\n\n"
-                        f"🔔 _Soyez informés avant tout le monde sur Info France Plus._"
+                        f"*{theme}* | **Info France Plus**\n\n"
+                        f"{emoji} *{titre}*\n\n"
+                        f"Source : *{source}*\n"
+                        f"[Lire l'article complet]({lien})\n\n"
+                        f"_Restez informés en direct sur Info France Plus_ → t.me/infofranceplus"
                     )
                     
                     res = envoyer_telegram(message, image_url)

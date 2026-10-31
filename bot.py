@@ -4,6 +4,7 @@ import requests
 import os
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import threading
+import re
 
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN", "9032544948:AAFm1AVtaOLtcbdxY3Fhqdys-gq-YcC5bkA")
 CHANNEL_ID = os.getenv("CHANNEL_ID", "@InfoFrancePlus")
@@ -12,7 +13,11 @@ CHANNEL_ID = os.getenv("CHANNEL_ID", "@InfoFrancePlus")
 RSS_FEEDS = [
     {"url": "https://feeds.leparisien.fr/leparisien/rss", "source": "Le Parisien"},
     {"url": "https://www.bfmtv.com/rss/news-24-7/", "source": "BFMTV"},
-    {"url": "https://www.lemonde.fr/rss/en_continu.xml", "source": "Le Monde"}
+    {"url": "https://www.lemonde.fr/rss/en_continu.xml", "source": "Le Monde"},
+    {"url": "https://www.humanite.fr/rss", "source": "L'Humanité"},
+    {"url": "https://www.rfi.fr/fr/rss", "source": "RFI"},
+    {"url": "https://www.liberation.fr/arc/outboundfeeds/rss/", "source": "Libération"},
+    {"url": "https://www.mediapart.fr/articles/feed", "source": "Mediapart"},
 ]
 
 CHECK_INTERVAL = 300  # 5 minutes
@@ -43,7 +48,6 @@ def envoyer_telegram(texte, image_url=None):
         print(f"Erreur d'envoi : {e}")
 
 def get_image_url(entry):
-    """Essaie de récupérer une image depuis le flux RSS"""
     if hasattr(entry, "enclosures") and entry.enclosures:
         for enc in entry.enclosures:
             if enc.get("type", "").startswith("image"):
@@ -57,18 +61,23 @@ def get_image_url(entry):
     
     return None
 
+def clean_summary(text):
+    if not text:
+        return ""
+    text = re.sub(r'<[^>]+>', '', text)
+    if len(text) > 250:
+        text = text[:247] + "..."
+    return text.strip()
+
 def get_theme_and_emoji(titre):
-    """Retourne le thème + emoji selon le titre"""
     titre_lower = titre.lower()
     
-    # Important (FLASH INFO) → emoji éclair
     if any(word in titre_lower for word in [
         "iran", "israel", "ukraine", "guerre", "bombardement", "missile", "attaque", 
         "mort", "tué", "attentat", "explosion", "frappe", "conflit", "armée", "soldat"
     ]):
         return "FLASH INFO", "⚡️"
     
-    # Politique
     if any(word in titre_lower for word in [
         "macron", "gouvernement", "président", "politique", "assemblée", "sénat", 
         "loi", "député", "ministre", "réforme", "élection", "vote", "parti", 
@@ -76,7 +85,6 @@ def get_theme_and_emoji(titre):
     ]):
         return "Politique", "🏛️"
     
-    # Faits divers / Justice
     elif any(word in titre_lower for word in [
         "police", "justice", "tribunal", "procès", "arrestation", "crime", 
         "meurtre", "agression", "vol", "cambriolage", "prison", "condamné", 
@@ -84,7 +92,6 @@ def get_theme_and_emoji(titre):
     ]):
         return "Faits divers", "⚖️"
     
-    # Économie
     elif any(word in titre_lower for word in [
         "économie", "euro", "bourse", "inflation", "emploi", "entreprise", 
         "chômage", "salaire", "prix", "carburant", "essence", "immobilier", 
@@ -92,7 +99,6 @@ def get_theme_and_emoji(titre):
     ]):
         return "Économie", "📈"
     
-    # Sport
     elif any(word in titre_lower for word in [
         "sport", "foot", "football", "match", "ligue", "psg", "om", "rugby", 
         "tennis", "roland-garros", "cyclisme", "tour de france", "basket", 
@@ -100,7 +106,6 @@ def get_theme_and_emoji(titre):
     ]):
         return "Sport", "⚽"
     
-    # Météo / Climat / Environnement
     elif any(word in titre_lower for word in [
         "climat", "météo", "tempête", "chaleur", "inondation", "canicule", 
         "orage", "neige", "froid", "réchauffement", "écologie", "pollution", 
@@ -108,14 +113,12 @@ def get_theme_and_emoji(titre):
     ]):
         return "Météo / Climat", "🌪️"
     
-    # Santé
     elif any(word in titre_lower for word in [
         "santé", "hôpital", "covid", "virus", "médecin", "épidémie", 
         "vaccin", "maladie", "cancer", "urgences", "soignants", "grippe"
     ]):
         return "Santé", "🏥"
     
-    # International
     elif any(word in titre_lower for word in [
         "international", "monde", "europe", "chine", "usa", "états-unis", 
         "russie", "poutine", "trump", "biden", "allemagne", "italie", 
@@ -123,7 +126,6 @@ def get_theme_and_emoji(titre):
     ]):
         return "International", "🌍"
     
-    # Société / Éducation
     elif any(word in titre_lower for word in [
         "école", "éducation", "université", "étudiant", "professeur", 
         "manifestation", "grève", "syndicat", "retraite", "logement", 
@@ -131,14 +133,12 @@ def get_theme_and_emoji(titre):
     ]):
         return "Société", "👥"
     
-    # Tech / Science
     elif any(word in titre_lower for word in [
         "technologie", "tech", "ia", "intelligence artificielle", "internet", 
         "téléphone", "apple", "google", "espace", "nasa", "science"
     ]):
         return "Tech / Science", "🔬"
     
-    # Culture / People
     elif any(word in titre_lower for word in [
         "cinéma", "film", "musique", "concert", "festival", "culture", 
         "people", "célébrité", "acteur", "chanteur"
@@ -164,11 +164,23 @@ def verifier_actus():
                     lien = entry.link
                     image_url = get_image_url(entry)
                     
+                    summary = ""
+                    if hasattr(entry, "summary"):
+                        summary = clean_summary(entry.summary)
+                    elif hasattr(entry, "description"):
+                        summary = clean_summary(entry.description)
+                    
                     theme, emoji = get_theme_and_emoji(titre)
                     
                     message = (
                         f"*{theme}* | **Info France Plus**\n\n"
                         f"{emoji} *{titre}*\n\n"
+                    )
+                    
+                    if summary:
+                        message += f"{summary}\n\n"
+                    
+                    message += (
                         f"Source : *{source}*\n"
                         f"[Lire l'article complet]({lien})\n\n"
                         f"_Restez informés en direct sur Info France Plus_ → t.me/infofranceplus"
@@ -183,7 +195,6 @@ def verifier_actus():
         except Exception as e:
             print(f"Erreur sur le flux {source} : {e}")
 
-# Serveur HTTP minimal pour Render
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
